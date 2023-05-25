@@ -122,6 +122,12 @@ async function _getReport(reportId) {
   try {
     // SELECT the report with id equal to reportId
     // return the report
+
+    const report = await client.query(`
+    SELECT * FROM reports
+    WHERE id = ${reportId}
+    `);
+    return report.rows[0];
   } catch (error) {
     throw error;
   }
@@ -138,6 +144,28 @@ async function _getReport(reportId) {
  */
 async function closeReport(reportId, password) {
   try {
+    const report = await _getReport(reportId);
+
+    if (!report) {
+      throw new Error('Report does not exist with that id');
+    }
+
+    if (report.password !== password) {
+      throw new Error('Password incorrect for this report, please try again');
+    }
+
+    if (!report.isOpen) {
+      throw new Error('This report has already been closed');
+    }
+
+    const update = await client.query(`
+    UPDATE reports
+    SET "isOpen" = false
+    WHERE id = ${reportId};
+    `);
+
+    return { message: 'Report successfully closed!' };
+
     // First, actually grab the report with that id
     // If it doesn't exist, throw an error with a useful message
     // If the passwords don't match, throw an error
@@ -163,7 +191,39 @@ async function closeReport(reportId, password) {
 async function createReportComment(reportId, commentFields) {
   // read off the content from the commentFields
 
+  const { content } = commentFields;
+
   try {
+    const report = await _getReport(reportId);
+
+    if (!report) {
+      throw new Error('That report does not exist, no comment has been made');
+    }
+
+    if (Date.parse(report.expirationDate) < new Date()) {
+      throw new Error(
+        'The discussion time on this report has expired, no comment has been made'
+      );
+    }
+
+    if (!report.isOpen) {
+      throw new Error('That report has been closed, no comment has been made');
+    }
+
+    const comment = await client.query(
+      `
+    INSERT INTO comments
+    ("reportId", content)
+    VALUES ($1, $2)
+    RETURNING *;
+    `,
+      [reportId, content]
+    );
+
+    if (comment.rows[0]) {
+      return comment.rows[0];
+    }
+
     // grab the report we are going to be commenting on
     // if it wasn't found, throw an error saying so
     // if it is not open, throw an error saying so
@@ -179,4 +239,11 @@ async function createReportComment(reportId, commentFields) {
 
 // export the client and all database functions below
 
-module.exports = { client, createReport, getOpenReports };
+module.exports = {
+  client,
+  createReport,
+  getOpenReports,
+  _getReport,
+  closeReport,
+  createReportComment,
+};
