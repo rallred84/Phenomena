@@ -39,31 +39,37 @@ const client = new Client(
 
 async function getOpenReports() {
   try {
-    const reports = await client.query(`
+    const reportSearchResults = await client.query(`
     SELECT * FROM reports
     WHERE "isOpen" = true;
     `);
+    const reports = reportSearchResults.rows;
 
-    const reportIds = reports.rows.map((report) => report.id);
+    const reportIds = reports.map((report) => report.id);
 
-    const comments = await client.query(
+    let idCounter = '';
+
+    for (let i = 0; i < reportIds.length; i++) {
+      idCounter = `${idCounter}$${i + 1}, `;
+    }
+
+    const commentSearchResults = await client.query(
       `
     SELECT * FROM comments
-    WHERE "reportId" IN ($1, $2);
-    `,
+    WHERE "reportId" IN (${idCounter.slice(0, idCounter.length - 2)});`,
       reportIds
     );
 
-    const result = reports.rows.map((report) => {
-      delete report.password;
-      report.comments = comments.rows.filter(
+    const comments = commentSearchResults.rows;
+
+    reports.map((report) => {
+      report.comments = comments.filter(
         (comment) => comment.reportId === report.id
       );
       report.isExpired =
         Date.parse(report.expirationDate) < new Date() ? true : false;
-      return report;
     });
-    return result;
+    return reports;
   } catch (error) {
     throw error;
   }
@@ -123,10 +129,13 @@ async function _getReport(reportId) {
     // SELECT the report with id equal to reportId
     // return the report
 
-    const report = await client.query(`
+    const report = await client.query(
+      `
     SELECT * FROM reports
-    WHERE id = ${reportId}
-    `);
+    WHERE id = $1
+    `,
+      [reportId]
+    );
     return report.rows[0];
   } catch (error) {
     throw error;
@@ -158,11 +167,14 @@ async function closeReport(reportId, password) {
       throw new Error('This report has already been closed');
     }
 
-    const update = await client.query(`
+    await client.query(
+      `
     UPDATE reports
     SET "isOpen" = false
-    WHERE id = ${reportId};
-    `);
+    WHERE id = $1;
+    `,
+      [reportId]
+    );
 
     return { message: 'Report successfully closed!' };
 
@@ -218,6 +230,15 @@ async function createReportComment(reportId, commentFields) {
     RETURNING *;
     `,
       [reportId, content]
+    );
+
+    await client.query(
+      `
+    UPDATE reports
+    SET "expirationDate" = CURRENT_TIMESTAMP + interval '1 day'
+    WHERE id = $1
+     `,
+      [reportId]
     );
 
     if (comment.rows[0]) {
