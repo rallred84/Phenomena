@@ -92,15 +92,11 @@ apiRouter.post('/reports/:reportId/comments', async (req, res, next) => {
   try {
     const { reportId } = req.params;
     const commentFields = req.body;
-    console.log(reportId);
-    console.log(commentFields);
 
     const comment = await createReportComment(reportId, commentFields);
     if (comment.id) {
-      console.log(comment);
+      res.send(comment);
     }
-
-    res.send(comment);
   } catch (error) {
     next(error);
   }
