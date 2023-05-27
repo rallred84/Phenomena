@@ -7,7 +7,11 @@ const { Client } = require('pg');
 // Create the client using new Client(CONNECTION_STRING)
 // Do not connect to the client in this file!
 
-const client = new Client('postgres://localhost:5432/phenomena-dev');
+const client = new Client(
+  process.env.NODE_ENV === 'dev'
+    ? 'postgres://localhost:5432/phenomena-dev'
+    : process.env.DB_URL
+);
 
 /**
  * Report Related Methods
